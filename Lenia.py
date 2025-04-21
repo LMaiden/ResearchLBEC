@@ -112,27 +112,25 @@ size = 256;  mid = size // 2;  scale = 5;  cx, cy = 20, 20
 #________________________________________________________________________________________________________________________________________________
 
 #Load Entity
-globals().update(pattern["fish"]);  C = np.asarray(cells)
+globals().update(pattern["aquarium"])
 
 #Create Empty world
-A = np.zeros((size, size))
+# A = np.zeros((size, size))
 
 #Place Scaled entity
-C = scipy.ndimage.zoom(C, scale, order=0);  R *= scale
-A[cx:cx+C.shape[0], cy:cy+C.shape[1]] = C
+# C = scipy.ndimage.zoom(C, scale, order=0);  R *= scale
+# A[cx:cx+C.shape[0], cy:cy+C.shape[1]] = C
 
-
-#Kernel Creation - FFT kernel
-# y, x = np.ogrid[-mid:mid, -mid:mid]
-# D = (np.sqrt(x**2 + y**2)) / R * len(b)
-# K = (D<len(b)) * b[np.minimum(D.astype(int),len(b)-1)] * F.bell(D % 1, 0.5, 0.15)
-# fK = np.fft.fft2(np.fft.fftshift(K / np.sum(K)))
+#Place scaled entity
+As = [ np.zeros([size, size]) for i in range(3) ]
+Cs = [ scipy.ndimage.zoom(np.asarray(c), scale, order=0) for c in cells ];  R *= scale
+for A,C in zip(As,Cs):  A[cx:cx+C.shape[0], cy:cy+C.shape[1]] = C
 
 #Multiple kernels preparation
 Ds = []
 for k in kernels:
     y, x = np.ogrid[-mid:mid, -mid:mid]
-    D = (np.sqrt(x**2 + y**2)) / R * len(k['b'])
+    D = (np.sqrt(x**2 + y**2)) / R * len(k['b']) / k['r']
     Ds.append(D)
 Ks = [ (D<len(k['b'])) * np.asarray(k['b'])[np.minimum(D.astype(int),len(k['b'])-1)] * F.bell(D%1, 0.5, 0.15) for D,k in zip(Ds,kernels) ]
 nKs = [ K / np.sum(K) for K in Ks ]
@@ -142,14 +140,21 @@ fKs = [ np.fft.fft2(np.fft.fftshift(K)) for K in nKs ]
 def growth(U, m , s):
     return F.bell(U, m, s)*2-1
 
-def update(frame):
-    global A
-    # U = scipy.signal.convolve2d(A, K, mode='same', boundary='wrap')
-    Us = [ np.real(np.fft.ifft2(fK * np.fft.fft2(A))) for fK in fKs ]
-    Gs = [ growth(U, k['m'], k['s']) for U,k in zip(Us,kernels) ]
-    A = np.clip(A + 1/T * np.mean(np.asarray(Gs),axis=0), 0, 1)
-    img.set_array(A)
-    return img,
+def update(i):
+  global As, img
+  ''' calculate convolution from source channels c0 '''
+  #Us = [ np.real(np.fft.ifft2(fK * np.fft.fft2(A))) for fK in fKs ]
+  fAs = [ np.fft.fft2(A) for A in As ]
+  Us = [ np.real(np.fft.ifft2(fK * fAs[k['c0']])) for fK,k in zip(fKs,kernels) ]
+  ''' calculate growth values for destination channels c1 '''
+  Gs = [ growth(U, k['m'], k['s']) for U,k in zip(Us,kernels) ]
+  Hs = [ sum(k['h']*G for G,k in zip(Gs,kernels) if k['c1']==c1) for c1 in range(3) ]
+  ''' add growth values to channels '''
+  #A = np.clip(A + 1/T * np.mean(np.asarray(Gs),axis=0), 0, 1)
+  As = [ np.clip(A + 1/T * H, 0, 1) for A,H in zip(As,Hs) ]
+  ''' show image in RGB '''
+  img.set_array(np.dstack(As))
+  return img,
 
 
 ############################################################# Animation setup #####################################################################################
