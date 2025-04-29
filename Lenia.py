@@ -111,7 +111,7 @@ size = 256;  mid = size // 2;  scale = 2;  cx, cy = 20, 20
 
 #________________________________________________________________________________________________________________________________________________
 
-def run_world_execute(me):
+def run_world_execute(me, max_iterations=2000):
 
   #Load Entity
   globals().update(me)
